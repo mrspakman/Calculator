@@ -28,6 +28,18 @@ software works and its resource needs are measured.
 
 **Optional / nice to have:** variable descriptions, discipline categories, units.
 
+## Usage modes (priority order)
+
+1. **Evaluate (first mode to build):** recall a stored formula, e.g.
+   `R = R1·R2/(R1+R2)`, enter values for the right-hand-side variables, get R.
+   No rearrangement needed.
+2. **Rearrange:** "Solve for: ___" symbolically (e.g. solve the formula above for R1).
+3. **Rearrange + evaluate:** solve for a variable, then enter values.
+
+Owner confirmed that many real formulas repeat a variable (like the parallel-resistor
+formula) and some are more complex, so mode 2 needs more than a simple
+"undo one operation at a time" engine.
+
 ## Additional math (wish list, can be phased)
 
 - Differentiation
@@ -106,3 +118,6 @@ requirement to return a rearranged formula.
 | Date | Decision |
 |------|----------|
 | 2026-11-11 | Project brief created from owner's initial goals. |
+| 2026-11-11 | No built-in formulas; all user-created. |
+| 2026-11-11 | First mode to build = evaluate a stored formula with entered values. |
+| 2026-11-11 | Repeated-variable formulas are common → rearrangement engine must handle them. |
