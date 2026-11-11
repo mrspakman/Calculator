@@ -91,6 +91,11 @@ requirement to return a rearranged formula.
 - Sharp reflective Memory LCD.
 - C/C++ firmware.
 
+### From the fx-991EX manual (Casio published specs)
+- Power is solar cell **+** LR44; ≈ 2 yr battery life at 1 h/day. Solar assist is part of its battery life.
+- 15 internal digits; display ±1 at 10th digit; range 1e-99 … 9.999999999e99.
+- 11.1 × 77 × 165.5 mm, 90 g. Auto-off ≈ 10 min.
+
 ### Untested assumptions (must be measured)
 - ClassWiz-like battery life is achievable (target, not spec).
 - A coin cell can supply the peak current of the solver.
@@ -121,4 +126,5 @@ requirement to return a rearranged formula.
 | 2026-11-11 | No built-in formulas; all user-created. |
 | 2026-11-11 | First mode to build = evaluate a stored formula with entered values. |
 | 2026-11-11 | Repeated-variable formulas are common → rearrangement engine must handle them. |
+| 2026-11-11 | Owner wants the full fx-991EX function set added to our build (see docs/FEATURES.md). Phasing and verification approach proposed, awaiting agreement. Device is intended for use with important equipment → correctness verification is a first-class requirement. |
 | 2026-11-11 | Limitation: solve for one variable at a time. A numeric answer requires every other variable to have a value; otherwise show the symbolic rearrangement and name the missing values. |
