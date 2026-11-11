@@ -121,3 +121,4 @@ requirement to return a rearranged formula.
 | 2026-11-11 | No built-in formulas; all user-created. |
 | 2026-11-11 | First mode to build = evaluate a stored formula with entered values. |
 | 2026-11-11 | Repeated-variable formulas are common → rearrangement engine must handle them. |
+| 2026-11-11 | Limitation: solve for one variable at a time. A numeric answer requires every other variable to have a value; otherwise show the symbolic rearrangement and name the missing values. |
