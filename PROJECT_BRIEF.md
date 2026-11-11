@@ -1,0 +1,108 @@
+# Project Brief — Formula-Storing Handheld Calculator
+
+This file is the single source of truth for goals and decisions.
+Update it when a decision changes; don't re-ask the owner for anything recorded here.
+
+## Goal
+
+A handheld calculator with roughly the size, weight, and convenience of a Casio
+ClassWiz fx-991EX that can **store formulas and rearrange them algebraically**.
+Replaceable batteries, very long battery life, no recharging.
+
+**Approach:** prove the software in simulation first. No hardware spend until the
+software works and its resource needs are measured.
+
+## Core functional requirements
+
+- Store up to **20 user-defined formulas** (user-entered, not a fixed built-in list).
+- Name, edit, replace, recall formulas.
+- Formulas persist through power-off and battery replacement (non-volatile storage).
+- Detect variables in a formula; user picks "Solve for: ___".
+- **Symbolic rearrangement** without needing values for other variables.
+  - Example: `P = I^2*R`, solve for R → `R = P/I^2`
+- Enter known values → numerical result.
+  - Example: P = 100, I = 2 → R = 25
+- Simplify expressions.
+- Clearly handle: multiple solutions, domain restrictions, invalid input,
+  non-convergence, and underdetermined cases (more unknowns than equations).
+
+**Optional / nice to have:** variable descriptions, discipline categories, units.
+
+## Additional math (wish list, can be phased)
+
+- Differentiation
+- Integration — keep these distinct:
+  - **Numerical definite** integration (cheap, likely early)
+  - **Symbolic indefinite** integration (expensive, may be phased in later)
+- Inverse functions
+
+## Software approach (proposed)
+
+Hybrid engine:
+1. Focused symbolic algorithms for rearranging/simplifying *supported* equation types.
+2. Direct substitution and evaluation when values are known.
+3. Newton's method / other numerical solvers when no analytic solution is available.
+4. Numerical integration where appropriate.
+
+Numerical methods **supplement** symbolic rearrangement — they never replace the
+requirement to return a rearranged formula.
+
+- Evaluate existing embedded algebra engines **before** writing a CAS from scratch.
+- If a restricted engine is used, its supported equation types and limits must be
+  written down explicitly.
+- Desktop proof of concept: Python + SymPy (reference/oracle).
+- Embedded firmware: likely C or C++ (not final). Language alone doesn't set battery life.
+
+## Hardware & energy preferences
+
+- Lightweight plastic handheld enclosure.
+- Reflective monochrome display, no power-hungry backlight.
+- Physical buttons.
+- Small replaceable battery, ideally a coin cell **if measurements show it's practical**.
+- Low standby current, keypress wake, auto power-off.
+- Final device = custom PCB (not a dev board).
+- Choose hardware from **measured** software needs; don't assume a big processor.
+
+## Status of facts — keep these separated
+
+### Confirmed (owner's decisions)
+- Software simulation before hardware.
+- 20 user formulas, persistent.
+- Symbolic rearrangement is mandatory; numeric is supplemental.
+- Replaceable batteries, no recharge.
+- Owner handles power electronics. Claude helps with software architecture,
+  engine selection, firmware, equation entry, storage, display/keypad, programming, debugging.
+
+### Proposed / candidates (NOT decided)
+- CR2450 coin cell.
+- STM32U5 dev board for prototyping.
+- Sharp reflective Memory LCD.
+- C/C++ firmware.
+
+### Untested assumptions (must be measured)
+- ClassWiz-like battery life is achievable (target, not spec).
+- A coin cell can supply the peak current of the solver.
+- Formula storage is small relative to engine code + working RAM (likely, unverified).
+- Whether the fx-991EX's own processor class could run this software — **unknown**;
+  the fx-991EX has no supported user-programming interface.
+
+## Working style (owner preferences)
+
+- Brainstorm, then execute. Agree on direction before building.
+- Keep things simple; keep responses short and digestible (audience: an EE, not a beginner).
+- Offer input that improves the project.
+- Don't draw conclusions from exploratory questions.
+
+## Roadmap (current)
+
+1. **Define minimum software scope** (save → recall → pick variable → symbolic or numeric answer). ← *we are here*
+2. Desktop proof of concept in Python/SymPy; build a test set of real formulas.
+3. Survey embedded algebra engines; pick candidates.
+4. Prototype engine in C/C++ on desktop; measure code size, RAM, run time.
+5. Map measurements to MCU/battery candidates; only then buy hardware.
+
+## Decision log
+
+| Date | Decision |
+|------|----------|
+| 2026-11-11 | Project brief created from owner's initial goals. |
