@@ -107,8 +107,8 @@ requirement to return a rearranged formula.
 
 ## Roadmap (current)
 
-1. **Define minimum software scope** (save → recall → pick variable → symbolic or numeric answer). ← *we are here*
-2. Desktop proof of concept in Python/SymPy; build a test set of real formulas.
+1. ~~Define minimum software scope~~ (done: modes 1–3, one unknown at a time).
+2. Desktop proof of concept in Python/SymPy (`prototype/`, first version done); build a test set of real formulas. ← *we are here*
 3. Survey embedded algebra engines; pick candidates.
 4. Prototype engine in C/C++ on desktop; measure code size, RAM, run time.
 5. Map measurements to MCU/battery candidates; only then buy hardware.
