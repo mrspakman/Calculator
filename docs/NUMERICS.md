@@ -21,6 +21,7 @@
 3. `tests/test_ranges_errors.py`: each input-range edge from manual pp.40-41
    (just inside works, just outside gives the documented error), plus every error type.
 4. `tests/test_display.py`, `tests/test_formulas.py`.
+5. `tests/test_regressions.py`: one test per defect found in code review.
 
 Testing reduces risk; it does not prove the absence of errors. For safety-critical
 values, keep an independent cross-check.

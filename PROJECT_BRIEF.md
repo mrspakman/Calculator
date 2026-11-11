@@ -133,4 +133,5 @@ requirement to return a rearranged formula.
 | 2026-11-11 | Owner wants the full fx-991EX function set added to our build (see docs/FEATURES.md). Phasing and verification approach proposed, awaiting agreement. Device is intended for use with important equipment → correctness verification is a first-class requirement. |
 | 2026-11-11 | Built full desktop simulation in Python (`calc/`). Exact rationals + 34-digit floats; QR dropped; known differences listed in docs/NUMERICS.md. |
 | 2026-11-11 | Owner: compute core must be extremely lightweight; UI is throwaway, owner keeps the compute code. Current core depends on SymPy (68.6 MB) and mpmath (4.6 MB), so it does not meet this yet. Plan proposed, awaiting agreement. |
+| 2026-11-11 | Code-quality pass: lint-clean (ruff), pyproject.toml, 6 defects found and fixed with regression tests; 140 tests pass. C-core plan still awaiting owner decisions. |
 | 2026-11-11 | Limitation: solve for one variable at a time. A numeric answer requires every other variable to have a value; otherwise show the symbolic rearrangement and name the missing values. |

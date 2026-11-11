@@ -20,13 +20,14 @@ from . import linalg as la
 from . import stats as st
 from .constants import BY_KEY
 from .conversions import CONVERSIONS, convert
-from .display import (Setup, format_base, format_complex, format_dms, format_eng,
-                      format_real, format_scalar, to_decimal)
-from .errors import (ArgumentError, CalcError, CannotSolve, DimensionError, MathError,
-                     RangeError, SyntaxErr, TimeOut, VariableError)
+from .display import (Setup, format_base, format_complex, format_dms, format_real,
+                      format_scalar, to_decimal)
+from .errors import (CalcError, CannotSolve, DimensionError, MathError, RangeError, SyntaxErr,
+                     TimeOut, VariableError)
 from .scalars import (add, as_int, check, div, is_complex, is_integer, is_real, is_scalar,
                       mul, neg, power, snap_rational, sub, to_mpc, to_mpf)
 from .parser import Lexer, Parser, split_top
+from .spreadsheet import Sheet
 
 MODES = ["COMP", "CMPLX", "BASE-N", "MATRIX", "VECTOR", "STAT", "DIST", "SHEET",
          "TABLE", "EQN", "INEQ", "RATIO"]
@@ -56,11 +57,19 @@ class Pair:
 
 
 @dataclass
+class DisplayHints:
+    """How one result should be shown, decided while it was evaluated."""
+    dms: bool = False          # input contained a degree-minute-second value
+    form: str | None = None    # complex form forced by ▶r∠θ / ▶a+bi
+
+
+@dataclass
 class Output:
-    text: str
+    text: str                  # what the display shows
     value: object
-    exact_text: str = ""
-    decimal_text: str = ""
+    exact_text: str            # exact form (fraction, √, π) - for S⇔D toggling
+    decimal_text: str          # decimal form
+    hints: DisplayHints
 
 
 class Calculator:
@@ -75,10 +84,10 @@ class Calculator:
         self.base = 10
         self.history: list[tuple[str, str]] = []
         self.rng = random.Random(seed)
-        self._out_form = None
-        self._dms = False
-        self._numeric = False
-        from .spreadsheet import Sheet
+        self._hints = DisplayHints()     # scratch pad for the evaluation in progress only
+        self._cls_key = None
+        self._cls: dict[str, str] = {}
+        self._words_sorted: list[str] = []
         self.sheet_data = Sheet(self)
 
     # ================================================================ lexer context
@@ -115,8 +124,9 @@ class Calculator:
         return self._classes().get(w)
 
     def _classes(self):
-        key = (self.mode,)
-        if getattr(self, "_cls_key", None) == key:
+        """Map of every name the lexer accepts in the current mode -> its role."""
+        key = self.mode
+        if self._cls_key == key:
             return self._cls
         cls = {}
         for f in self._functions():
@@ -157,11 +167,13 @@ class Calculator:
                     cls[k] = "postfix"
                 cls[">t"] = "postfix"
         self._cls_key, self._cls = key, cls
+        self._words_sorted = sorted(cls, key=len, reverse=True)
         return cls
 
     @property
-    def words(self):
-        return set(self._classes())
+    def words_longest_first(self):
+        self._classes()
+        return self._words_sorted
 
     def postfix_bp(self, w):
         if w in OUTPUT_FORMS:
@@ -180,10 +192,21 @@ class Calculator:
             if self.mode == "STAT":
                 self.stats = st.Stats()   # manual: leaving STAT clears the editor
             if self.mode == "SHEET":
-                from .spreadsheet import Sheet
-                self.sheet_data = Sheet(self)
+                self.sheet_data = Sheet(self)   # manual: leaving SHEET clears it
+        if mode == "BASE-N" and not isinstance(self.ans, int):
+            self.ans = self._to_base_int(self.ans)
+        elif mode != "BASE-N" and isinstance(self.ans, int):
+            self.ans = Fraction(self.ans)
         self.mode = mode
         self._cls_key = None
+
+    @staticmethod
+    def _to_base_int(v):
+        """Ans carried into BASE-N: fractional part cut off (manual p.23); 0 if unusable."""
+        if not is_real(v):
+            return 0
+        n = int(v) if isinstance(v, Fraction) else int(mp.floor(v) if v >= 0 else mp.ceil(v))
+        return n if -(2 ** 31) <= n < 2 ** 31 else 0
 
     def set_base(self, base):
         if base not in (2, 8, 10, 16):
@@ -202,36 +225,34 @@ class Calculator:
 
     # ================================================================ running
     def run(self, text: str, decimal=False) -> list[Output]:
-        """Evaluate one input line (multi-statements separated by ':')."""
-        target = None
-        store = None
-        for arrow in ("->",):
-            if arrow in text:
-                text, store = text.rsplit(arrow, 1)
-                store = store.strip()
-        mplus = None
-        stripped = text.rstrip()
-        if stripped.endswith("M+") or stripped.endswith("M-"):
-            mplus = stripped[-1]
-            text = stripped[:-2]
-        toks = self.tokenize(text)
+        """Evaluate one input line.
+
+        Supports multi-statements ('a:b'), storing ('expr->A') and the
+        independent memory keys ('expr M+', 'expr M-').  decimal=True is the ≈ key.
+        """
+        text, _, store = text.partition("->")
+        text = text.rstrip()
+        memory_op = None
+        if text.endswith(("M+", "M-")):
+            memory_op, text = text[-1], text[:-2]
         outs = []
-        for part in split_top(toks, ":"):
-            if len(part) == 1:
+        for statement in split_top(self.tokenize(text), ":"):
+            if len(statement) == 1:
                 raise SyntaxErr("empty statement")
-            node = self.parse_tokens(part)
-            outs.append(self._evaluate_top(node, decimal))
-        if store:
-            self.store(store, outs[-1].value)
-        if mplus:
-            v = outs[-1].value
-            self.vars["M"] = add(self.vars["M"], v) if mplus == "+" else sub(self.vars["M"], v)
-        for o in outs:
-            self.history.append((text, o.text))
+            outs.append(self._evaluate_top(self.parse_tokens(statement), decimal))
+        last = outs[-1].value
+        if store.strip():
+            self.store(store.strip(), last)
+        if memory_op:
+            if not is_scalar(last):
+                raise SyntaxErr("M+ / M- need a number")
+            m = self.vars["M"]
+            self.vars["M"] = add(m, last) if memory_op == "+" else sub(m, last)
+        self.history.extend((text, o.text) for o in outs)
         return outs
 
-    def _evaluate_top(self, node, decimal=False):
-        self._out_form, self._dms, self._numeric = None, False, False
+    def _evaluate_top(self, node, decimal=False) -> Output:
+        self._hints = DisplayHints()
         v = self.ev(node, {})
         if self.mode == "BASE-N" and isinstance(v, int):
             self._bcheck(v)
@@ -243,39 +264,41 @@ class Calculator:
             self.ans = v.values[0]
         else:
             self.ans = v
-        return self.output(v, decimal)
+        return self.output(v, decimal, self._hints)
 
-    def output(self, v, decimal=False) -> Output:
-        exact = self.format(v, decimal_only=False)
-        dec = self.format(v, decimal_only=True)
-        return Output(dec if decimal else exact, v, exact, dec)
+    def output(self, v, decimal=False, hints=None) -> Output:
+        hints = hints or DisplayHints()
+        exact = self.format(v, decimal_only=False, hints=hints)
+        dec = self.format(v, decimal_only=True, hints=hints)
+        return Output(dec if decimal else exact, v, exact, dec, hints)
 
-    def format(self, v, decimal_only=False):
+    def format(self, v, decimal_only=False, hints=None) -> str:
+        """Display text for any result value under the current setup."""
+        hints = hints or DisplayHints()
         s = self.setup
         if isinstance(v, la.Matrix):
-            return "[" + ", ".join("[" + ", ".join(format_scalar(x, s, decimal_only) for x in r) + "]"
-                                   for r in v.rows) + "]"
+            return "[" + ", ".join(
+                "[" + ", ".join(format_scalar(x, s, decimal_only) for x in r) + "]"
+                for r in v.rows) + "]"
         if isinstance(v, la.Vector):
             return "[" + ", ".join(format_scalar(x, s, decimal_only) for x in v.items) + "]"
         if isinstance(v, Pair):
-            return ", ".join(f"{l}={self.format(x, decimal_only)}" for l, x in zip(v.labels, v.values))
+            return ", ".join(f"{label}={self.format(x, decimal_only)}"
+                             for label, x in zip(v.labels, v.values, strict=True))
         if self.mode == "BASE-N" and isinstance(v, int):
             return format_base(v, self.base)
         if is_complex(v):
-            return format_complex(v, s, decimal_only, self._out_form)
-        if self._out_form == "r∠θ" and is_real(v):
+            return format_complex(v, s, decimal_only, hints.form)
+        if hints.form == "r∠θ" and is_real(v):
             return format_complex(to_mpc(v), s, decimal_only, "r∠θ") if v != 0 else "0"
-        if self._dms:
+        if hints.dms:
             return format_dms(v, s)
         return format_real(v, s, decimal_only)
 
     def value_of(self, text):
         """Evaluate an input (e.g. a coefficient) without touching Ans or history."""
-        saved = (self._out_form, self._dms)
-        try:
-            v = self.ev(self.parse(text), {})
-        finally:
-            self._out_form, self._dms = saved
+        self._hints = DisplayHints()
+        v = self.ev(self.parse(text), {})
         if not is_scalar(v) and not isinstance(v, int):
             raise SyntaxErr("a number is required here")
         return v
@@ -297,7 +320,7 @@ class Calculator:
         k = n[0]
         if k == "num":
             if n[2]:
-                self._dms = True
+                self._hints.dms = True
             if self.mode == "BASE-N":
                 v = n[1] if isinstance(n[1], int) else int(n[1])
                 if v == 2 ** 31:          # allowed only as the operand of a minus sign
@@ -384,17 +407,12 @@ class Calculator:
                 raise MathError("division by zero")
             q = abs(a) // abs(b)
             return self._bcheck(q if (a >= 0) == (b >= 0) else -q)
-        u = lambda v: v & 0xFFFFFFFF
-        s = lambda v: v - 2 ** 32 if v >= 2 ** 31 else v
-        if op == "and":
-            return s(u(a) & u(b))
-        if op == "or":
-            return s(u(a) | u(b))
-        if op == "xor":
-            return s(u(a) ^ u(b))
-        if op == "xnor":
-            return s(u(~(u(a) ^ u(b))))
-        raise SyntaxErr(f"'{op}' is not available in BASE-N mode")
+        bitwise = {"and": lambda p, q: p & q, "or": lambda p, q: p | q,
+                   "xor": lambda p, q: p ^ q, "xnor": lambda p, q: ~(p ^ q)}
+        if op not in bitwise:
+            raise SyntaxErr(f"'{op}' is not available in BASE-N mode")
+        bits = bitwise[op](a & 0xFFFFFFFF, b & 0xFFFFFFFF) & 0xFFFFFFFF
+        return bits - 2 ** 32 if bits >= 2 ** 31 else bits      # back to signed 32-bit
 
     # ---------------------------------------------------------------- operators
     def binary(self, op, a, b):
@@ -430,7 +448,7 @@ class Calculator:
 
     def postfix(self, op, v):
         if op in OUTPUT_FORMS:
-            self._out_form = OUTPUT_FORMS[op]
+            self._hints.form = OUTPUT_FORMS[op]
             return v
         if isinstance(v, la.Matrix):
             if op == "²":
@@ -473,7 +491,10 @@ class Calculator:
         if name in ("Min", "Max", "Mean", "Sum"):
             return self.sheet_data.range_func(name, args, env)
         vals = [self.ev(a, env) for a in args]
-        one = lambda: (fn.require_args(name, vals, 1), vals[0])[1]
+
+        def one():
+            fn.require_args(name, vals, 1)
+            return vals[0]
         if self.mode == "BASE-N":
             v = one()
             if name == "Not":
@@ -599,8 +620,6 @@ class Calculator:
         F = self._real_fn(args[0], env)
         try:
             val, err = mp.quad(F, [a, b], error=True, maxdegree=8)
-        except CalcError:
-            raise
         except (ZeroDivisionError, ValueError, OverflowError):
             raise MathError("integrand undefined in the interval") from None
         if not mp.isfinite(val):
@@ -618,7 +637,7 @@ class Calculator:
             d = mp.diff(F, a)
             left = mp.diff(F, a, direction=-1)
             right = mp.diff(F, a, direction=1)
-        except CalcError:
+        except MathError:
             raise MathError("function undefined near the point") from None
         scale = max(1, abs(d))
         if abs(left - right) > max(tol, mp.mpf("1e-8")) * scale:
@@ -676,7 +695,9 @@ class Calculator:
         return outs
 
     def calc_variables(self, text):
-        return self.variables_in(self.parse(text.replace("=", "+")) if "=" in text else self.parse(text))
+        """Variables (A-F, M, x, y) used on either side of a CALC/SOLVE input."""
+        sides = split_top(self.tokenize(text), "=")
+        return self.variables_in([self.parse_tokens(t) for t in sides])
 
     def solve(self, text, var="x", guess=None, values=None):
         """SOLVE: Newton/secant iteration for var (manual p.19).
@@ -700,10 +721,10 @@ class Calculator:
 
         def F(t):
             env = {var: t}
-            l, r = self.ev(lhs, env), self.ev(rhs, env)
-            if not (is_real(l) and is_real(r)):
+            left, right = self.ev(lhs, env), self.ev(rhs, env)
+            if not (is_real(left) and is_real(right)):
                 raise MathError("complex value")
-            return to_mpf(sub(l, r))
+            return to_mpf(sub(left, right))
 
         root = None
         for solver, start in (("secant", x0), ("secant", x0 + 1), ("mnewton", x0)):
@@ -727,13 +748,17 @@ class Calculator:
 
     # ================================================================ TABLE
     def table(self, f_text, g_text, start, end, step):
+        """Number table of f(x) (and g(x)) for x = start, start+step, ... end.
+        Rows that fail show 'ERROR'.  Row limits: 45 for f only, 30 for f and g."""
         fnode = self.parse(f_text)
         gnode = self.parse(g_text) if g_text else None
-        start, end, step = (snap_rational(check(self.ev(self.parse(str(v)), {}))
-                                          if isinstance(v, str) else v) for v in (start, end, step))
+        start, end, step = (snap_rational(check(v)) for v in (start, end, step))
         if step == 0 or (end - start) / step < 0:
             raise RangeError("step must move from Start toward End")
-        rows = int(mp.floor(to_mpf(div(sub(end, start), step)) + mp.mpf("1e-20"))) + 1
+        span = div(sub(end, start), step)
+        # exact floor for rationals; for floats tolerate rounding just below an integer
+        whole = int(span) if isinstance(span, Fraction) else int(mp.floor(span + mp.mpf("1e-20")))
+        rows = whole + 1
         limit = 30 if gnode is not None else 45
         if rows > limit:
             raise RangeError(f"table would have {rows} rows (limit {limit})")
@@ -741,14 +766,16 @@ class Calculator:
         x = start
         for _ in range(rows):
             row = [x]
-            for node in filter(None, (fnode, gnode)):
+            for node in (fnode, gnode):
+                if node is None:
+                    continue
                 try:
                     row.append(self.ev(node, {"x": x}))
                 except CalcError:
                     row.append("ERROR")
             out.append(row)
             x = add(x, step)
-        self.vars["x"] = out[-1][0]
+        self.vars["x"] = out[-1][0]       # manual: table generation changes x
         return out
 
     # ================================================================ resets

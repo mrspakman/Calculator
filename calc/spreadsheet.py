@@ -54,11 +54,14 @@ class Sheet:
     def memory_used(self):
         return sum(len(t) + 11 if t.startswith("=") else 10 for t in self.cells.values())
 
-    def set(self, ref, text, _at=None):
+    def set(self, ref, text):
+        """Enter a cell.  '=...' is a formula (re-evaluated when inputs change);
+        anything else is a constant, evaluated once now (manual p.33)."""
         ref = name(*parse_ref(ref))
         text = text.strip()
         if not text:
-            return self.delete(ref)
+            self.delete(ref)
+            return
         old = self.cells.get(ref)
         if text.startswith("="):
             if len(text) - 1 > 49:
@@ -66,9 +69,7 @@ class Sheet:
             self.cells[ref] = text
             self.consts.pop(ref, None)
         else:
-            if len(text) > 10 and not re.fullmatch(r"[\d.E+\-]+", text):
-                pass  # constants are evaluated immediately; only the value is kept
-            value = self._eval(text, ref)
+            value = self._eval(text)
             self.cells[ref] = text
             self.consts[ref] = value
         if self.memory_used() > MEMORY:
@@ -110,7 +111,8 @@ class Sheet:
             raise SyntaxErr("nothing to paste")
         kind, src, text = self.clipboard
         if text is None:
-            return self.delete(dst)
+            self.delete(dst)
+            return
         if kind == "copy" and text.startswith("="):
             (sc, sr), (dc, dr) = parse_ref(src), parse_ref(dst)
             text = shift_refs(text, dc - sc, dr - sr)
@@ -136,18 +138,12 @@ class Sheet:
             self.set(ref, shift_refs(expr, c - c0, r - r0))
 
     # ------------------------------------------------------------ evaluation
-    def _eval(self, text, ref):
+    def _eval(self, text):
+        if self.calc.mode != "SHEET":
+            raise SyntaxErr("the spreadsheet is only available in SHEET mode")
         if "?" in text:
             raise RangeError("reference outside A1:E45")
-        mode = self.calc.mode
-        self.calc.set_mode("SHEET") if mode != "SHEET" else None
-        try:
-            node = self.calc.parse(text)
-            return self.calc.ev(node, {"__cell__": ref})
-        finally:
-            if mode != "SHEET":
-                self.calc.mode = mode
-                self.calc._cls_key = None
+        return self.calc.ev(self.calc.parse(text), {})
 
     def value(self, ref):
         ref = name(*parse_ref(ref))
@@ -165,7 +161,7 @@ class Sheet:
             raise CircularError(f"circular reference through {ref}")
         self._stack.append(ref)
         try:
-            v = self._eval(text[1:], ref)
+            v = self._eval(text[1:])
             self.cache[ref] = v
             return v
         except CalcError as e:
@@ -175,13 +171,13 @@ class Sheet:
         finally:
             self._stack.pop()
 
-    def ref_value(self, node, env):
+    def ref_value(self, node, _env):
         if node[0] == "range":
             raise SyntaxErr("a cell range can only be used inside Min/Max/Mean/Sum")
         v = self.value(node[1].replace("$", ""))
         return Fraction(0) if v is None else v
 
-    def range_func(self, fname, args, env):
+    def range_func(self, fname, args, _env):
         if len(args) != 1 or args[0][0] != "range":
             raise SyntaxErr(f"{fname} needs a cell range like A1:A3")
         vals = [v for v in (self.value(r) for r in cells_in(args[0][1].replace("$", ""),
@@ -198,7 +194,7 @@ class Sheet:
             s = add(s, v)
         return s if fname == "Sum" else div(s, Fraction(len(vals)))
 
-    def grid(self, rows=None):
+    def grid(self):
         """Formatted values: {ref: text}."""
         out = {}
         for ref in self.cells:

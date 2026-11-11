@@ -39,14 +39,14 @@ class Tok:
 
 class Lexer:
     def __init__(self, ctx):
-        """ctx supplies: words (set of known names), base_ctx (None or 2/8/10/16),
-        sheet (bool) for spreadsheet cell references."""
+        """ctx supplies: words_longest_first (known names), word_class(name),
+        base_ctx (None, or 2/8/10/16 in BASE-N mode) and sheet (cell references on)."""
         self.ctx = ctx
 
     def tokenize(self, text: str) -> list[Tok]:
         for a, b in _NORMALISE.items():
             text = text.replace(a, b)
-        words = sorted(self.ctx.words, key=len, reverse=True)
+        words = self.ctx.words_longest_first
         toks, i, n = [], 0, len(text)
         while i < n:
             ch = text[i]
@@ -55,7 +55,7 @@ class Lexer:
                 continue
             # spreadsheet cell references / ranges
             if self.ctx.sheet and (m := _CELL_RE.match(text, i)) and not _alnum(text, m.end()):
-                toks.append(Tok("CELL", m.group().replace("$", "$"), i))
+                toks.append(Tok("CELL", m.group(), i))
                 i = m.end()
                 continue
             # base-n literals
@@ -85,11 +85,11 @@ class Lexer:
         toks.append(Tok("END", None, n))
         return toks
 
-    def _match_word(self, text, i, words):
+    @staticmethod
+    def _match_word(text, i, words):
+        """Longest known name starting at i ('sinh' beats 'sin', 'xy' -> 'x','y')."""
         for w in words:
             if text.startswith(w, i):
-                # words ending in a letter must not run into more letters
-                # unless the rest can itself be split into known words
                 return w
         return None
 
@@ -276,8 +276,6 @@ class Parser:
                 return ("call", t.value, args)
             if c in ("var", "const", "statvar"):
                 return ("name", t.value)
-            if c == "prefix":      # base-n d/h/b/o handled in lexer; Not/Neg are funcs
-                return ("pre", t.value, self.expr(NEG_BP))
             raise SyntaxErr(f"'{t.value}' cannot start an expression")
         raise SyntaxErr("incomplete expression")
 

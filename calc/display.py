@@ -8,7 +8,7 @@ import math
 
 import mpmath as mp
 
-from .scalars import SNAP, is_complex, mpf_to_fraction, to_mpf
+from .scalars import SNAP, is_complex, to_mpf
 
 decimal.getcontext().prec = 60
 DIGITS = 10
@@ -94,6 +94,8 @@ def format_decimal(x, setup: Setup) -> str:
             return _sci(d, 10, setup)
         q = Decimal(1).scaleb(-setup.fix_digits)
         r = d.quantize(q, rounding=ROUND_HALF_UP)
+        if r == 0:
+            r = abs(r)                      # no "-0.000"
         s = f"{r:.{setup.fix_digits}f}"
         return _group(s, setup)
     # Norm 1 / Norm 2
@@ -163,8 +165,7 @@ def exact_form(x) -> str | None:
     f = Fraction(mp.nstr(k, 32, min_fixed=-mp.inf, max_fixed=mp.inf)).limit_denominator(1000)
     if f != 0 and abs(mp.mpf(f.numerator) / f.denominator - k) <= SNAP * abs(k):
         num = "" if abs(f.numerator) == 1 else str(abs(f.numerator))
-        s = f"{'-' if f < 0 else ''}{num}π" + (f"/{f.denominator}" if f.denominator != 1 else "")
-        return s
+        return f"{'-' if f < 0 else ''}{num}π" + (f"/{f.denominator}" if f.denominator != 1 else "")
     # single surds: x² rational
     sq = x * x
     f = Fraction(mp.nstr(sq, 32, min_fixed=-mp.inf, max_fixed=mp.inf)).limit_denominator(10 ** 6)

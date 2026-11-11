@@ -8,7 +8,7 @@ import mpmath as mp
 from .display import Surd, _sqfree
 from .errors import MathError
 from .linalg import _eliminate
-from .scalars import check, exact_root, is_complex, mpf_to_fraction, snap_rational, to_mpf
+from .scalars import check, exact_root, is_complex, snap_rational, to_mpf
 
 
 # ---------------------------------------------------------------- simultaneous
@@ -180,51 +180,55 @@ def unique_roots(roots):
 # ---------------------------------------------------------------- inequalities
 
 def inequality(coeffs, rel):
-    """Solve a·x^n + ... rel 0 with rel in {'>','<','>=','<='}.
-    Returns a list of segment strings' building blocks:
-      ("all",) / ("none",) / list of (lo, lo_incl, hi, hi_incl) with None = ∞."""
+    """Solve  a·xⁿ + ... (rel) 0  for degree 2-4, rel in {'>', '<', '>=', '<='}.
+
+    Returns [("all",)], [("none",)] or a list of segments (lo, lo_incl, hi, hi_incl)
+    where lo/hi are root values (Fraction/Surd/mpf) and None means -∞ / +∞.
+
+    Method: the distinct real roots r1 < ... < rk split the line into open gaps
+    (-∞,r1), (r1,r2), ..., (rk,+∞) and the points r1..rk.  Each gap is tested at
+    one interior point (the sign cannot change inside a gap); roots satisfy the
+    relation only for >= and <=.  Adjacent satisfied pieces are merged.
+    """
     if rel not in (">", "<", ">=", "<="):
         raise MathError("relation must be >, <, >= or <=")
     roots = polynomial_roots(coeffs)
     real = sorted(unique_roots([r for r in roots if _is_real(r)]), key=_value)
-    vals = [_value(r) for r in real]
     cs = [to_mpf(c) for c in coeffs]
 
-    def ok(x):
+    def satisfied(x):
         y = mp.polyval(cs, x)
         return {">": y > 0, "<": y < 0, ">=": y >= 0, "<=": y <= 0}[rel]
 
-    # pieces: interval before r0, r0, (r0,r1), r1, ..., after last
-    pieces = []
-    edges = [None] + list(range(len(real))) + [None]
     if not real:
-        return [("all",)] if ok(mp.mpf(0)) else [("none",)]
-    tests = [vals[0] - 1] + [(vals[i] + vals[i + 1]) / 2 for i in range(len(vals) - 1)] + [vals[-1] + 1]
-    for i in range(len(real) + 1):
-        pieces.append(("open", i, ok(tests[i])))
+        return [("all",)] if satisfied(mp.mpf(0)) else [("none",)]
+
+    vals = [_value(r) for r in real]
+    gaps = [(a + b) / 2 for a, b in zip(vals[:-1], vals[1:], strict=True)]
+    probes = [vals[0] - 1, *gaps, vals[-1] + 1]
+    roots_ok = rel in (">=", "<=")
+    # pieces in left-to-right order: (lower bound, lower incl., upper bound, upper incl., ok)
+    pieces = []
+    for i, probe in enumerate(probes):
+        lo = real[i - 1] if i > 0 else None
+        hi = real[i] if i < len(real) else None
+        pieces.append((lo, False, hi, False, satisfied(probe)))
         if i < len(real):
-            pieces.append(("point", i, rel in (">=", "<=")))
-    segs, cur = [], None
-    for kind, i, inc in pieces:
-        if inc:
-            if cur is None:
-                if kind == "open":
-                    cur = [None if i == 0 else real[i - 1], False]
-                else:
-                    cur = [real[i], True]
-            cur_end = (real[i] if kind == "point" else (None if i == len(real) else real[i]),
-                       kind == "point")
-        else:
-            if cur is not None:
-                segs.append((cur[0], cur[1], cur_end[0], cur_end[1]))
-                cur = None
-    if cur is not None:
-        segs.append((cur[0], cur[1], cur_end[0], cur_end[1]))
-    if not segs:
+            pieces.append((real[i], True, real[i], True, roots_ok))
+
+    segments = []
+    previous_ok = False
+    for lo, lo_inc, hi, hi_inc, ok in pieces:
+        if ok and previous_ok:                       # extends the current segment
+            segments[-1] = (segments[-1][0], segments[-1][1], hi, hi_inc)
+        elif ok:
+            segments.append((lo, lo_inc, hi, hi_inc))
+        previous_ok = ok
+    if not segments:
         return [("none",)]
-    if len(segs) == 1 and segs[0][0] is None and segs[0][2] is None:
+    if segments == [(None, False, None, False)]:
         return [("all",)]
-    return segs
+    return segments
 
 
 # ---------------------------------------------------------------- ratio
@@ -250,7 +254,9 @@ def format_inequality(segs, fmt):
         if sg[0] == "none":
             return "No Solution"
         lo, lo_inc, hi, hi_inc = sg
-        f = lambda v: str(v) if isinstance(v, Surd) else fmt(v)
+
+        def f(v):
+            return format_root(v, fmt)
         if lo is not None and lo is hi:
             out.append(f"x={f(lo)}")
             continue

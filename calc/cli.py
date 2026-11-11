@@ -1,14 +1,13 @@
 """Text-mode simulation of the calculator.   Run:  python -m calc"""
 from fractions import Fraction
 from pathlib import Path
-import sys
 
 from . import equations as eq
 from . import functions as fn
 from .calculator import MODES, VARIABLES, Calculator
 from .constants import CONSTANTS
 from .conversions import CONVERSIONS
-from .display import format_eng, format_dms
+from .display import format_dms, format_eng
 from .errors import CalcError
 from .formula_store import FormulaStore
 from .formulas import FormulaError, format_result, parse_equation, solve as fsolve, variables
@@ -52,14 +51,15 @@ class CLI:
         self.formulas = FormulaStore(DATA / "formulas.json")
         self.last = None
         self.showing_exact = True
-        self.eng_shift = 0
+        self.eng_shift = None        # None: not in ENG display
 
     def ask(self, prompt):
         return self.inp(prompt)
 
     def num(self, prompt, default=None):
         while True:
-            raw = self.ask(prompt + (f" [{self.c.format(default)}]" if default is not None else "") + ": ").strip()
+            shown = f" [{self.c.format(default)}]" if default is not None else ""
+            raw = self.ask(f"{prompt}{shown}: ").strip()
             if not raw and default is not None:
                 return default
             try:
@@ -90,6 +90,9 @@ class CLI:
                 self.out(str(e))
             except FormulaError as e:
                 self.out(f"Formula error: {e}")
+            except (ValueError, IndexError, TypeError) as e:
+                # malformed command arguments (e.g. 'simul x'): report, keep running
+                self.out(f"Input error: {e}. Type 'help' for the command format.")
 
     # ------------------------------------------------------------------ dispatch
     def handle(self, line):
@@ -98,16 +101,20 @@ class CLI:
             return
         word, _, rest = line.partition(" ")
         rest = rest.strip()
-        cmd = getattr(self, "cmd_" + word.lower().replace("-", "_"), None)
-        if cmd and word.lower() not in ("e",):
-            return cmd(rest)
+        if word.lower() == "eng<":
+            self.engineering(-1)
+            return
+        cmd = getattr(self, "cmd_" + word.lower(), None)
+        if cmd:
+            cmd(rest)
+            return
         decimal = line.startswith("~")
         outs = self.c.run(line.lstrip("~"), decimal=decimal)
         for o in outs:
             self.out(o.text)
         self.last = outs[-1]
         self.showing_exact = not decimal
-        self.eng_shift = 0
+        self.eng_shift = None        # None: not in ENG display
 
     # ------------------------------------------------------------------ general
     def cmd_help(self, rest):
@@ -129,7 +136,10 @@ class CLI:
             return
         key, _, val = rest.partition(" ")
         val = val.strip()
-        onoff = lambda: {"on": True, "off": False}[val.lower()]
+
+        def onoff():
+            return {"on": True, "off": False}[val.lower()]
+
         try:
             if key == "angle":
                 s.angle = {"deg": "Deg", "rad": "Rad", "gra": "Gra"}[val.lower()[:3]]
@@ -190,12 +200,15 @@ class CLI:
         self.out(self.last.exact_text if self.showing_exact else self.last.decimal_text)
 
     def cmd_eng(self, rest):
-        if self.last:
-            self.eng_shift += 1
-            self.out(format_eng(self.last.value, self.c.setup, self.eng_shift - 1))
+        self.engineering(+1)
 
-    def cmd_eng_(self, rest):
-        pass
+    def engineering(self, step):
+        """ENG (step +1) / SHIFT ENG (step -1).  The first press shows standard
+        engineering form; each further press moves the decimal point 3 places."""
+        if not self.last:
+            return
+        self.eng_shift = 0 if self.eng_shift is None else self.eng_shift + step
+        self.out(format_eng(self.last.value, self.c.setup, self.eng_shift))
 
     def cmd_dms(self, rest):
         if self.last:
@@ -237,7 +250,8 @@ class CLI:
             self.c.set_mode("COMP")
         expr = rest or self.ask("Equation (e.g. x^2+B=0): ")
         used = self.c.calc_variables(expr)
-        var = self.ask(f"Solve for ({'/'.join(used)}) [{used[0] if used else 'x'}]: ").strip() or (used[0] if used else "x")
+        default = used[0] if used else "x"
+        var = self.ask(f"Solve for ({'/'.join(used)}) [{default}]: ").strip() or default
         values = {}
         for v in used:
             if v != var:
@@ -261,44 +275,26 @@ class CLI:
 
     # ------------------------------------------------------------------ MATRIX / VECTOR
     def cmd_mat(self, rest):
-        name, _, lit = rest.partition(" ")
-        key = "Mat" + name.upper().replace("MAT", "")
-        if key not in self.c.mats or key == "MatAns":
-            self.out("mat A|B|C|D [[..],[..]]")
-            return
-        if not lit:
-            m = self.c.mats[key]
-            self.out(self.c.format(m) if m else f"{key} is not defined")
-            return
-        saved = self.c.mode
-        self.c.set_mode("MATRIX")
-        v = self.c.ev(self.c.parse(lit), {})
-        from .linalg import Matrix
-        if not isinstance(v, Matrix):
-            self.c.set_mode(saved)
-            self.out("give a matrix like [[1,2],[3,4]]")
-            return
-        self.c.mats[key] = v
-        self.out(f"{key} = {self.c.format(v)}")
+        self._define("MATRIX", "Mat", self.c.mats, rest, "mat A|B|C|D [[1,2],[3,4]]")
 
     def cmd_vct(self, rest):
-        name, _, lit = rest.partition(" ")
-        key = "Vct" + name.upper().replace("VCT", "")
-        if key not in self.c.vcts or key == "VctAns":
-            self.out("vct A|B|C|D [x,y(,z)]")
+        self._define("VECTOR", "Vct", self.c.vcts, rest, "vct A|B|C|D [x,y] or [x,y,z]")
+
+    def _define(self, mode, prefix, store, rest, usage):
+        """Define or show MatA-D / VctA-D (switches to the matching mode)."""
+        letter, _, literal = rest.partition(" ")
+        key = prefix + letter.upper().replace(prefix.upper(), "")
+        if key not in store or key.endswith("Ans"):
+            self.out(usage)
             return
-        if not lit:
-            v = self.c.vcts[key]
+        if self.c.mode != mode:
+            self.c.set_mode(mode)
+        if not literal:
+            v = store[key]
             self.out(self.c.format(v) if v else f"{key} is not defined")
             return
-        self.c.set_mode("VECTOR")
-        v = self.c.ev(self.c.parse(lit), {})
-        from .linalg import Vector
-        if not isinstance(v, Vector):
-            self.out("give a vector like [1,2] or [1,2,3]")
-            return
-        self.c.vcts[key] = v
-        self.out(f"{key} = {self.c.format(v)}")
+        self.c.store(key, self.c.ev(self.c.parse(literal), {}))
+        self.out(f"{key} = {self.c.format(store[key])}")
 
     # ------------------------------------------------------------------ STAT
     def cmd_stat(self, rest):
@@ -324,18 +320,23 @@ class CLI:
             self.out(f"row {len(s.rows)} added")
         elif sub == "list":
             for i, (x, y, f) in enumerate(s.rows, 1):
-                cols = [self.c.format(x)] + ([self.c.format(y)] if y is not None else []) + \
-                       ([self.c.format(f)] if s.freq_column else [])
+                cols = [self.c.format(x)]
+                if y is not None:
+                    cols.append(self.c.format(y))
+                if s.freq_column:
+                    cols.append(self.c.format(f))
                 self.out(f"  {i:3}  " + "  ".join(f"{c:>12}" for c in cols))
         elif sub == "del":
             s.rows.pop(int(args) - 1)
         elif sub == "clear":
             s.rows.clear()
         elif sub == "calc":
-            names = ["n", "xbar", "sumx", "sumx2", "sig2x", "sigx", "s2x", "sx", "minX", "Q1", "Med", "Q3", "maxX"]
-            if s.kind != "1-Var":
-                names = ["n", "xbar", "sumx", "sumx2", "sigx", "sx", "ybar", "sumy", "sumy2", "sumxy",
-                         "sigy", "sy", "minX", "maxX", "minY", "maxY"]
+            if s.kind == "1-Var":
+                names = ["n", "xbar", "sumx", "sumx2", "sig2x", "sigx", "s2x", "sx",
+                         "minX", "Q1", "Med", "Q3", "maxX"]
+            else:
+                names = ["n", "xbar", "sumx", "sumx2", "sigx", "sx", "ybar", "sumy", "sumy2",
+                         "sumxy", "sigy", "sy", "minX", "maxX", "minY", "maxY"]
             for nm in names:
                 try:
                     self.out(f"  {nm:6}= {self.c.format(s.value(nm), True)}")
@@ -351,7 +352,8 @@ class CLI:
     def cmd_dist(self, rest):
         from . import distributions as d
         specs = {"normpd": (d.normal_pd, ["x", "σ", "μ"], [None, Fraction(1), Fraction(0)]),
-                 "normcd": (d.normal_cd, ["Lower", "Upper", "σ", "μ"], [None, None, Fraction(1), Fraction(0)]),
+                 "normcd": (d.normal_cd, ["Lower", "Upper", "σ", "μ"],
+                            [None, None, Fraction(1), Fraction(0)]),
                  "invn": (d.inverse_normal, ["Area", "σ", "μ"], [None, Fraction(1), Fraction(0)]),
                  "binompd": (d.binomial_pd, ["x", "N", "p"], [None] * 3),
                  "binomcd": (d.binomial_cd, ["x", "N", "p"], [None] * 3),
@@ -363,17 +365,18 @@ class CLI:
             return
         f, names, defaults = specs[key]
         xs = [None]
-        if names[0] == "x" and key not in ("normpd",) or key == "normpd":
+        if names[0] == "x":      # x may be a list of values (manual's List screen)
             raw = self.ask("  x (one value, or several separated by spaces for a list): ").strip()
             xs = [self.c.value_of(t) for t in raw.split()]
             names, defaults = names[1:], defaults[1:]
-        params = [self.num(f"  {n}", dv) for n, dv in zip(names, defaults)]
+        params = [self.num(f"  {n}", dv) for n, dv in zip(names, defaults, strict=True)]
         for x in xs:
             args = ([x] if x is not None else []) + params
             try:
                 v = f(*args)
                 self.c.ans = v
-                self.out((f"  x={self.c.format(x)}  " if len(xs) > 1 else "  ") + f"p= {self.c.format(v, True)}")
+                label = f"  x={self.c.format(x)}  " if len(xs) > 1 else "  "
+                self.out(f"{label}p= {self.c.format(v, True)}")
             except CalcError as e:
                 self.out(f"  x={self.c.format(x)}  ERROR ({e})")
 
@@ -388,11 +391,12 @@ class CLI:
         rows = self.c.table(f, g.strip() or None, start, end, step)
         self.out("      x" + " " * 10 + "f(x)" + (" " * 12 + "g(x)" if g.strip() else ""))
         for r in rows:
-            self.out("  " + "  ".join(f"{(v if isinstance(v, str) else self.c.format(v, True)):>14}" for v in r))
+            cells = (v if isinstance(v, str) else self.c.format(v, True) for v in r)
+            self.out("  " + "  ".join(f"{cell:>14}" for cell in cells))
 
     # ------------------------------------------------------------------ EQN / INEQ / RATIO
-    def _coeffs(self, n, letters):
-        return [self.num(f"  {l}") for l in letters[:n]]
+    def _coeffs(self, n, labels):
+        return [self.num(f"  {label}") for label in labels[:n]]
 
     def cmd_simul(self, rest):
         n = int(rest or 2)
@@ -411,7 +415,7 @@ class CLI:
         elif r.status == "infinite":
             self.out("Infinite Solution")
         else:
-            for v, val in zip(xs, r.values):
+            for v, val in zip(xs, r.values, strict=True):
                 self.out(f"  {v}= {self.c.format(val)}")
 
     def cmd_poly(self, rest):
@@ -527,7 +531,10 @@ class CLI:
                     continue
                 raw = self.ask(f"    {n}? ").strip()
                 if raw:
-                    vals[n] = float(self.c.value_of(raw))
+                    v = self.c.value_of(raw)
+                    if fn.is_complex(v):
+                        raise ValueError("formula values must be real")
+                    vals[n] = float(v)
             self.out(format_result(fsolve(q, target, vals)))
         else:
             self.out("f list | f save N Name : formula | f del N | f use N")

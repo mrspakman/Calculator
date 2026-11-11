@@ -72,7 +72,9 @@ class Stats:
         return s
 
     def sums(self):
-        sq = lambda v: mul(v, v)
+        def sq(v):
+            return mul(v, v)
+
         out = {"sumx": self._sum(lambda x, y: x), "sumx2": self._sum(lambda x, y: sq(x))}
         if self.kind != "1-Var":
             out.update({

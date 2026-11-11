@@ -1,0 +1,22 @@
+[project]
+name = "formula-calculator"
+version = "0.1.0"
+description = "Desktop simulation of a formula-storing scientific calculator"
+requires-python = ">=3.11"
+dependencies = ["mpmath>=1.3", "sympy>=1.14"]
+
+[project.optional-dependencies]
+test = ["pytest", "numpy", "scipy"]   # independent references used only by tests
+
+[project.scripts]
+formula-calc = "calc.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "B", "SIM", "UP", "PIE", "RET"]

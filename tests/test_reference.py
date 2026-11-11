@@ -21,7 +21,8 @@ REL = 1e-12
 
 
 def close(ours, ref, rel=REL, abs_=1e-14):
-    ours = complex(ours) if isinstance(ours, complex) else float(to_mpf(ours)) if not hasattr(ours, "imag") or isinstance(ours, F) else complex(ours)
+    """|ours - ref| within rel·|ref| (or abs_ near zero).  Works for real and complex."""
+    ours = complex(to_mpf(ours)) if isinstance(ours, F) else complex(ours)
     return abs(ours - ref) <= max(rel * abs(ref), abs_)
 
 
@@ -94,7 +95,8 @@ def test_powers_and_logs(c):
 
 def test_arithmetic_exact(c):
     for _ in range(N):
-        a, b = F(RNG.randint(-10 ** 6, 10 ** 6), RNG.randint(1, 999)), F(RNG.randint(-999, 999), RNG.randint(1, 99))
+        a = F(RNG.randint(-10 ** 6, 10 ** 6), RNG.randint(1, 999))
+        b = F(RNG.randint(-999, 999), RNG.randint(1, 99))
         assert val(c, f"({a})+({b})") == a + b
         assert val(c, f"({a})*({b})") == a * b
         if b:
@@ -102,7 +104,7 @@ def test_arithmetic_exact(c):
 
 
 def test_factorial_permutation_combination(c):
-    for n in range(0, 70):
+    for n in range(70):
         assert val(c, f"{n}!") == math.factorial(n)
     for _ in range(N):
         n = RNG.randint(0, 300)
@@ -117,7 +119,8 @@ def test_pol_rec(c):
     for _ in range(N):
         x, y = rnd(-1e3, 1e3), rnd(-1e3, 1e3)
         v = val(c, f"Pol({lit(x)},{lit(y)})").values
-        assert close(v[0], math.hypot(x, y)) and close(v[1], math.degrees(math.atan2(y, x)), abs_=1e-12)
+        assert close(v[0], math.hypot(x, y))
+        assert close(v[1], math.degrees(math.atan2(y, x)), abs_=1e-12)
         v = val(c, f"Rec({lit(x)},{lit(y)})").values
         assert close(v[0], x * math.cos(math.radians(y)), abs_=1e-10)
         assert close(v[1], x * math.sin(math.radians(y)), abs_=1e-10)
@@ -146,14 +149,16 @@ def test_distributions_vs_scipy():
         Fx, Fs, Fm = F(x), F(s), F(m)
         assert close(d.normal_pd(Fx, Fs, Fm), sst.norm.pdf(x, m, s), abs_=1e-15)
         lo, hi = sorted((rnd(-30, 30), rnd(-30, 30)))
-        assert close(d.normal_cd(F(lo), F(hi), Fs, Fm), sst.norm.cdf(hi, m, s) - sst.norm.cdf(lo, m, s), abs_=1e-13)
+        ref = sst.norm.cdf(hi, m, s) - sst.norm.cdf(lo, m, s)
+        assert close(d.normal_cd(F(lo), F(hi), Fs, Fm), ref, abs_=1e-13)
         area = rnd(1e-6, 1 - 1e-6)
         assert close(d.inverse_normal(F(area), Fs, Fm), sst.norm.ppf(area, m, s), rel=1e-9, abs_=1e-9)
         n = RNG.randint(1, 200)
         k = RNG.randint(0, n)
         p = round(rnd(0, 1), 4)
-        assert close(d.binomial_pd(F(k), F(n), F(str(p))), sst.binom.pmf(k, n, p), rel=1e-9, abs_=1e-15)
-        assert close(d.binomial_cd(F(k), F(n), F(str(p))), sst.binom.cdf(k, n, p), rel=1e-9, abs_=1e-14)
+        fp = F(str(p))
+        assert close(d.binomial_pd(F(k), F(n), fp), sst.binom.pmf(k, n, p), rel=1e-9, abs_=1e-15)
+        assert close(d.binomial_cd(F(k), F(n), fp), sst.binom.cdf(k, n, p), rel=1e-9, abs_=1e-14)
         lam = rnd(0.01, 100)
         k = RNG.randint(0, 150)
         assert close(d.poisson_pd(F(k), F(lam)), sst.poisson.pmf(k, lam), rel=1e-9, abs_=1e-15)
@@ -186,7 +191,7 @@ def test_regression_vs_scipy(c, kind):
         c.stats.set_type(kind)
         xs = [round(rnd(0.5, 50), 3) for _ in range(12)]
         ys = [round(rnd(0.5, 50), 3) for _ in range(12)]
-        for x, y in zip(xs, ys):
+        for x, y in zip(xs, ys, strict=True):
             c.stats.add(F(str(x)), F(str(y)))
         tx, ty = REG[kind]
         lr = sst.linregress(tx(np.array(xs)), ty(np.array(ys)))
@@ -201,10 +206,11 @@ def test_quadratic_regression_vs_numpy(c):
     c.stats.set_type("a+bx+cx2")
     xs = [rnd(-10, 10) for _ in range(15)]
     ys = [rnd(-10, 10) for _ in range(15)]
-    for x, y in zip(xs, ys):
+    for x, y in zip(xs, ys, strict=True):
         c.stats.add(F(x), F(y))
     cc, bb, aa = np.polyfit(xs, ys, 2)
-    assert close(val(c, "a"), aa, rel=1e-9) and close(val(c, "b"), bb, rel=1e-9) and close(val(c, "c"), cc, rel=1e-9)
+    for name, ref in (("a", aa), ("b", bb), ("c", cc)):
+        assert close(val(c, name), ref, rel=1e-9)
 
 
 def test_matrices_vs_numpy(c):
@@ -226,10 +232,11 @@ def test_simultaneous_vs_numpy():
         A = [[F(RNG.randint(-20, 20)) for _ in range(n)] for _ in range(n)]
         b = [F(RNG.randint(-20, 20)) for _ in range(n)]
         An = np.array(A, dtype=float)
-        r = eq.simultaneous([row + [bi] for row, bi in zip(A, b)])
+        r = eq.simultaneous([[*row, bi] for row, bi in zip(A, b, strict=True)])
         if abs(np.linalg.det(An)) > 1e-9:
             assert r.status == "unique"
-            assert np.allclose([float(to_mpf(v)) for v in r.values], np.linalg.solve(An, np.array(b, float)))
+            ours = [float(to_mpf(v)) for v in r.values]
+            assert np.allclose(ours, np.linalg.solve(An, np.array(b, float)))
         else:
             assert r.status in ("none", "infinite")
 
@@ -242,14 +249,17 @@ def test_polynomial_roots_are_roots():
             cs[0] = F(1)
         roots = eq.polynomial_roots(cs)
         assert len(roots) == deg
-        ref = sorted(np.roots([float(x) for x in cs]), key=lambda z: (round(z.real, 6), round(z.imag, 6)))
-        ours = sorted((complex(eq._value(r)) for r in roots), key=lambda z: (round(z.real, 6), round(z.imag, 6)))
-        for a, b in zip(ours, ref):
-            assert abs(a - b) <= 1e-6 * max(1, abs(b)), (cs, ours, ref)   # numpy is the weaker side here
+        def order(z):
+            return round(z.real, 6), round(z.imag, 6)
+
+        ref = sorted(np.roots([float(x) for x in cs]), key=order)
+        ours = sorted((complex(eq._value(r)) for r in roots), key=order)
+        for a, b in zip(ours, ref, strict=True):
+            assert abs(a - b) <= 1e-6 * max(1, abs(b)), (cs, ours, ref)   # numpy is the weaker side
         for r in roots:      # each root actually satisfies the polynomial
             z = complex(eq._value(r))
-            resid = sum(complex(float(cf)) * z ** (deg - i) for i, cf in enumerate(cs))
-            assert abs(resid) <= 1e-8 * max(1, max(abs(complex(float(cf)) * z ** (deg - i)) for i, cf in enumerate(cs)))
+            terms = [complex(float(cf)) * z ** (deg - i) for i, cf in enumerate(cs)]
+            assert abs(sum(terms)) <= 1e-8 * max(1, max(abs(t) for t in terms))
 
 
 def test_integration_vs_scipy(c):

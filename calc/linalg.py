@@ -43,7 +43,8 @@ def _abs_mag(v):
 def mat_add(a: Matrix, b: Matrix, op=add):
     if a.shape != b.shape:
         raise DimensionError("matrix sizes differ")
-    return Matrix([[op(x, y) for x, y in zip(ra, rb)] for ra, rb in zip(a.rows, b.rows)])
+    return Matrix([[op(x, y) for x, y in zip(ra, rb, strict=True)]
+                   for ra, rb in zip(a.rows, b.rows, strict=True)])
 
 
 def mat_scale(a: Matrix, k):
@@ -67,7 +68,7 @@ def mat_mul(a: Matrix, b: Matrix):
 
 
 def transpose(a: Matrix):
-    return Matrix([list(c) for c in zip(*a.rows)])
+    return Matrix([list(c) for c in zip(*a.rows, strict=True)])
 
 
 def identity(n):
@@ -98,7 +99,7 @@ def _eliminate(rows):
         for i in range(n):
             if i != r and a[i][c] != 0:
                 f = a[i][c]
-                a[i] = [sub(x, mul(f, y)) for x, y in zip(a[i], a[r])]
+                a[i] = [sub(x, mul(f, y)) for x, y in zip(a[i], a[r], strict=True)]
         pivots.append(c)
         r += 1
     return a, det, pivots
@@ -142,7 +143,7 @@ def mat_abs(a: Matrix):
 def vec_add(a: Vector, b: Vector, op=add):
     if len(a.items) != len(b.items):
         raise DimensionError("vector sizes differ")
-    return Vector([op(x, y) for x, y in zip(a.items, b.items)])
+    return Vector([op(x, y) for x, y in zip(a.items, b.items, strict=True)])
 
 
 def vec_scale(a: Vector, k):
@@ -153,7 +154,7 @@ def dot(a: Vector, b: Vector):
     if len(a.items) != len(b.items):
         raise DimensionError("vector sizes differ")
     s = Fraction(0)
-    for x, y in zip(a.items, b.items):
+    for x, y in zip(a.items, b.items, strict=True):
         s = add(s, mul(x, y))
     return s
 
@@ -177,7 +178,8 @@ def angle(a: Vector, b: Vector, unit):
     if na == 0 or nb == 0:
         raise MathError("angle with a zero vector")
     c = div(dot(a, b), mul(na, nb))
-    c = max(min(to_mpf(c), mp.mpf(1)), mp.mpf(-1)) if not isinstance(c, Fraction) else c
+    if not isinstance(c, Fraction):
+        c = max(min(c, mp.mpf(1)), mp.mpf(-1))   # rounding can push |cos| a hair past 1
     return fn.acos(c, unit)
 
 

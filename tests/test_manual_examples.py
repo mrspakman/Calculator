@@ -6,7 +6,6 @@ import pytest
 from calc import equations as eq
 from calc.calculator import Calculator
 from calc.cli import CLI
-from calc.stats import Stats
 
 
 @pytest.fixture

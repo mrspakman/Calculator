@@ -1,6 +1,0 @@
-sympy>=1.14
-mpmath>=1.3
-# test-only independent references
-pytest
-numpy
-scipy

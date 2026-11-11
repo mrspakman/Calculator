@@ -8,9 +8,10 @@ Goals and decisions: [`PROJECT_BRIEF.md`](PROJECT_BRIEF.md). Feature checklist:
 
 ## Run
 
-    pip install -r requirements.txt
+    pip install -e ".[test]"
     python -m calc            # interactive text calculator; type 'help'
-    python -m pytest -q       # 123 verification tests
+    python -m pytest -q       # verification tests
+    ruff check calc tests     # lint (rules in pyproject.toml)
 
 ## Typing expressions (one-line input)
 
@@ -44,4 +45,8 @@ Stored formulas: `f save 1 Parallel : R = R1*R2/(R1+R2)`, then `f use 1` → cho
       calculator.py  modes, memories, CALC, SOLVE, ∫, d/dx, Σ, table
       linalg.py stats.py distributions.py equations.py spreadsheet.py
       constants.py conversions.py formulas.py formula_store.py cli.py
-    tests/           manual examples, independent-reference tests, range edges
+    tests/           manual examples, independent-reference tests, range edges,
+                     and one regression test per defect found in review
+
+`cli.py` is the only file that does input/output. Everything else is pure
+computation, so the interface can be replaced without touching the math.

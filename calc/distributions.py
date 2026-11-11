@@ -78,16 +78,16 @@ def _poisson_args(x, lam):
 
 
 def poisson_pd(x, lam):
-    x, l = _poisson_args(x, lam)
-    return check(mp.exp(-l) * l ** x / mp.factorial(x))
+    x, rate = _poisson_args(x, lam)
+    return check(mp.exp(-rate) * rate ** x / mp.factorial(x))
 
 
 def poisson_cd(x, lam):
-    x, l = _poisson_args(x, lam)
+    x, rate = _poisson_args(x, lam)
     s = mp.mpf(0)
-    term = mp.exp(-l)
+    term = mp.exp(-rate)
     for k in range(x + 1):
         if k:
-            term *= l / k
+            term *= rate / k
         s += term
     return check(min(s, mp.mpf(1)))
