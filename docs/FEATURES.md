@@ -5,6 +5,10 @@ capabilities, our own design and UI. Status: ☐ not started · ◐ prototype ·
 
 Phase numbers are a **proposal**, not yet agreed.
 
+**Status 2026-11-11:** all phases 0-4 are implemented in the desktop simulation (`calc/`)
+and covered by tests (◐ = implemented and tested in the simulation; ☑ will mean
+verified on the target hardware). Exceptions: natural textbook display (UI stage) and QR (dropped).
+
 ## Reference numbers from the manual (confirmed, Casio's published specs)
 - Calculation range: ±1×10⁻⁹⁹ to ±9.999999999×10⁹⁹, or 0
 - Internal digits: 15. Display precision: ±1 at the 10th digit (single calc); errors accumulate.
@@ -19,38 +23,38 @@ Phase numbers are a **proposal**, not yet agreed.
 - ◐ Evaluate with known values; Newton fallback
 
 ## Phase 1 — Core calculator (Calculate mode)
-- ☐ Arithmetic with documented operator priority (manual p. 8–9, 13 levels)
-- ☐ Fractions (proper/mixed, reduced), S⇔D toggle, exact √ and π forms
-- ☐ %, degrees-minutes-seconds, engineering notation (ENG), engineering symbols (m µ n p f k M G T P E)
-- ☐ sin/cos/tan + inverses (Deg/Rad/Grad), sinh…tanh⁻¹, angle-unit conversion
-- ☐ 10^x, e^x, log, log_a(b), ln, x², x³, x^y, √, ∛, ˣ√y, x⁻¹, x!, Abs
-- ☐ Pol/Rec, nPr, nCr, Ran#, RanInt#, Rnd
-- ☐ Prime factorization (≤ 10 digits)
-- ☐ Numerical ∫ (Gauss-Kronrod, tol), d/dx at a point (central difference), Σ
-- ☐ Ans, variables A–F, x, y, M (M+, M−), multi-statements (:), history/replay
-- ☐ Setup: Fix/Sci/Norm1/Norm2, angle unit, fraction format, decimal mark, digit separator
-- ☐ CALC (prompt for variables) and SOLVE (Newton, initial guess, L−R residual)
-- ☐ Error types: Math, Stack, Syntax, Argument, Dimension, Variable, Cannot Solve, Range, Time Out
+- ◐ Arithmetic with documented operator priority (manual p. 8–9, 13 levels)
+- ◐ Fractions (proper/mixed, reduced), S⇔D toggle, exact √ and π forms
+- ◐ %, degrees-minutes-seconds, engineering notation (ENG), engineering symbols (m µ n p f k M G T P E)
+- ◐ sin/cos/tan + inverses (Deg/Rad/Grad), sinh…tanh⁻¹, angle-unit conversion
+- ◐ 10^x, e^x, log, log_a(b), ln, x², x³, x^y, √, ∛, ˣ√y, x⁻¹, x!, Abs
+- ◐ Pol/Rec, nPr, nCr, Ran#, RanInt#, Rnd
+- ◐ Prime factorization (≤ 10 digits)
+- ◐ Numerical ∫ (Gauss-Kronrod, tol), d/dx at a point (central difference), Σ
+- ◐ Ans, variables A–F, x, y, M (M+, M−), multi-statements (:), history/replay
+- ◐ Setup: Fix/Sci/Norm1/Norm2, angle unit, fraction format, decimal mark, digit separator
+- ◐ CALC (prompt for variables) and SOLVE (Newton, initial guess, L−R residual)
+- ◐ Error types: Math, Stack, Syntax, Argument, Dimension, Variable, Cannot Solve, Range, Time Out
 
 ## Phase 2 — Engineering-heavy modes
-- ☐ Complex: a+bi and r∠θ, conjugate, abs, arg, Re, Im, ▶r∠θ / ▶a+bi
-- ☐ Equation: simultaneous linear 2–4 unknowns; polynomial degree 2–4 (incl. complex roots, quadratic min/max)
-- ☐ Matrix: up to 4×4, MatA–D, MatAns, +, −, ×, det, transpose, inverse, identity, x², x³, Abs
-- ☐ Vector: 2D/3D, VctA–D, VctAns, dot, cross, abs, angle, unit vector
-- ☐ Base-N: DEC/HEX/BIN/OCT, 32-bit two's complement, and/or/xor/xnor/Not/Neg
-- ☐ Scientific constants (47, CODATA — we should use current CODATA, not 2010)
-- ☐ Unit conversions (manual p. 44 list; NIST SP 811)
+- ◐ Complex: a+bi and r∠θ, conjugate, abs, arg, Re, Im, ▶r∠θ / ▶a+bi
+- ◐ Equation: simultaneous linear 2–4 unknowns; polynomial degree 2–4 (incl. complex roots, quadratic min/max)
+- ◐ Matrix: up to 4×4, MatA–D, MatAns, +, −, ×, det, transpose, inverse, identity, x², x³, Abs
+- ◐ Vector: 2D/3D, VctA–D, VctAns, dot, cross, abs, angle, unit vector
+- ◐ Base-N: DEC/HEX/BIN/OCT, 32-bit two's complement, and/or/xor/xnor/Not/Neg
+- ◐ Scientific constants (47, CODATA — we should use current CODATA, not 2010)
+- ◐ Unit conversions (manual p. 44 list; NIST SP 811)
 
 ## Phase 3 — Statistics and data
-- ☐ Statistics: 1-var and 8 regression types, Freq column, Σ terms, mean, σ, s, min/max, quartiles, r, estimates x̂ ŷ
-- ☐ Normal-distribution P(t), Q(t), R(t), ▶t
-- ☐ Distribution: Normal PD/CD/inverse, Binomial PD/CD, Poisson PD/CD, list input
-- ☐ Table: f(x), g(x), start/end/step, row limits (45 / 30)
-- ☐ Inequality: degree 2–4 polynomial inequalities
-- ☐ Ratio: A:B = X:D and A:B = C:X
+- ◐ Statistics: 1-var and 8 regression types, Freq column, Σ terms, mean, σ, s, min/max, quartiles, r, estimates x̂ ŷ
+- ◐ Normal-distribution P(t), Q(t), R(t), ▶t
+- ◐ Distribution: Normal PD/CD/inverse, Binomial PD/CD, Poisson PD/CD, list input
+- ◐ Table: f(x), g(x), start/end/step, row limits (45 / 30)
+- ◐ Inequality: degree 2–4 polynomial inequalities
+- ◐ Ratio: A:B = X:D and A:B = C:X
 
 ## Phase 4 — Large / questionable value
-- ☐ Spreadsheet: 5 × 45 cells, relative/absolute refs, Min/Max/Mean/Sum, fill, copy/cut, recalculation, 1,700-byte limit
+- ◐ Spreadsheet: 5 × 45 cells, relative/absolute refs, Min/Max/Mean/Sum, fill, copy/cut, recalculation, 1,700-byte limit
 - ✗ QR code: links to the manufacturer's website. **Proposed: drop** (no equivalent service for us).
 - ☐ Natural textbook display (2-D fractions, ∫ templates): depends on the display; belongs to the screen/UI stage
 

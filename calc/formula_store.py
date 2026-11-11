@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from engine import parse_equation
+from .formulas import parse_equation
 
 SLOTS = 20
 

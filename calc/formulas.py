@@ -1,4 +1,4 @@
-"""Math engine for the desktop prototype (SymPy reference).
+"""Stored-formula engine (our own feature): symbolic rearrangement with SymPy.
 
 One job: given a stored equation, a target variable, and any known values,
 return the rearranged formula(s), the conditions they require, and a number
